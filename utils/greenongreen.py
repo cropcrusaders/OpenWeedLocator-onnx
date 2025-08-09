@@ -151,6 +151,9 @@ class GreenOnGreen:
             detections = self.session.run(None, {self.input_name: img_input})[0][0]
 
             for det in detections:
+                if len(det) < 5:
+                    # Skip detections with unexpected format
+                    continue
                 x, y, w, h, obj_conf, *class_conf = det
                 if not class_conf:
                     class_conf = [1.0]
