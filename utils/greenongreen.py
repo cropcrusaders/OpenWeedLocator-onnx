@@ -62,7 +62,6 @@ class GreenOnGreen:
         self.backend = None
 
         if self.model_path.suffix == ".onnx":
-            import onnxruntime as ort
 
             self.backend = "onnx"
             self.session = ort.InferenceSession(
