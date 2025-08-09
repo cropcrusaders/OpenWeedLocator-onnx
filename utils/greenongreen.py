@@ -77,7 +77,6 @@ class GreenOnGreen:
             from pycoral.adapters.common import input_size
             from pycoral.adapters.detect import get_objects
             from pycoral.utils.edgetpu import make_interpreter, run_inference
-
             self.backend = "tflite"
             self._run_inference = run_inference
             self._get_objects = get_objects
