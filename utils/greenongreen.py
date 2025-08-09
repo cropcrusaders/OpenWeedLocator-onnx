@@ -155,7 +155,7 @@ class GreenOnGreen:
                     # Skip detections with unexpected format
                     continue
                 x, y, w, h, obj_conf, *class_conf = det
-                if not class_conf:
+                if len(class_conf) == 0:
                     class_conf = [1.0]
                 class_id = int(np.argmax(class_conf))
                 score = obj_conf * class_conf[class_id]
