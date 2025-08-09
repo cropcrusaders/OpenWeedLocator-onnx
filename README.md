@@ -1482,7 +1482,7 @@ camera_name = cam1
 |    `resolution_height`    |                        Integer                         |                                                                                      Height of the camera resolution (updated to 480).                                                                                      |
 |    `exp_compensation`     |                Integer between -8 and 8                |                                           Change the target exposure setting for the exposure algorithm. Defaults to -2, preferencing darker settings for faster shutter speeds.                                            |
 |     **GreenOnGreen**      |                                                        |                                                                                                                                                                                                                             |
-|       `model_path`        |                          Path                          |                                                                                                  A path to the model file                                                                                                   |
+|       `model_path`        |                          Path                          | Path to the weed-detection model (.onnx or .tflite) |
 |       `confidence`        |                                                        |                                                                            The cutoff confidence value for a detection. Defaults to 0.5 or 50%.                                                                             |
 |     `class_filter_id`     |                        Integer                         |                           Which classes to filter and target. For example, using a out-the-box COCO model, you may want to only detect a specific class. Enter that specific class integer here.                            |
 |     **GreenOnBrown**      |                                                        |                                                                                                                                                                                                                             |
@@ -1722,13 +1722,12 @@ With the config files set, save them to the OWL, reboot, and you should be ready
 
 ### OWL Integration
 
-Green-on-Green capability is (almost) here!
-
-While we previously had implemented in-crop detection models with the Google Coral and Pycoral, the lack of support
-has made us reconsider that approach. Running detection models like YOLO is in the works to run on the base Raspberry Pi
-5 or with additional hardware such as the Raspberry Pi AI Kit with the Hailo 8L.
-
-If you would like to try the Google Coral, you can by following the instructions in the 'models' directory.
+Green-on-Green capability is now supported through ONNX Runtime.
+This allows running detection models such as YOLO on the Raspberry Pi 5
+without additional hardware. An example configuration file is
+available at `config/ONNX_GOG.ini`. The software will still use Google
+Coral TensorFlow Lite models when provided – see the instructions in the
+`models` directory if you are using a Coral accelerator.
 
 
 ### Model Training
@@ -1738,9 +1737,9 @@ start collecting and annotating images of relevant weeds for training. Alternati
 to [Weed-AI](https://weed-ai.sydney.edu.au/explore?is_head_filter=%5B%22latest+version%22%5D) to see if any image data
 may be relevant for your purposes.
 
->⚠️**NOTE**⚠️There do appear to be some issues with the exporting functionality of YOLOv5/v8 to .tflite models for use with
-the Coral. The issue has been raised on the Ultralytics repository and should hopefully be resolved soon. You can follow
-the updates [here](https://github.com/ultralytics/ultralytics/issues/1312).
+>⚠️**NOTE**⚠️ Exporting YOLOv5/v8 models to `.tflite` for the Coral can be
+unreliable. Exporting to ONNX (e.g. `yolo export model=best.pt format=onnx`)
+is recommended for running on the Raspberry Pi 5.
 
 [YOLOv8](https://github.com/ultralytics/ultralytics) and [YOLOv5](https://github.com/ultralytics/yolov5) currently
 provide the most user friendly methods of training, optimisation and exporting as `.tflite` files for use with the

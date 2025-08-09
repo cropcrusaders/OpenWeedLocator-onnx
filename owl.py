@@ -332,6 +332,13 @@ class Owl:
                 from utils.greenongreen import GreenOnGreen
                 model_path = self.config.get('GreenOnGreen', 'model_path')
                 confidence = self.config.getfloat('GreenOnGreen', 'confidence')
+                class_filter_id = self.config.get(
+                    'GreenOnGreen', 'class_filter_id', fallback=None
+                )
+                if class_filter_id in (None, '', 'None'):
+                    class_filter_id = None
+                else:
+                    class_filter_id = int(class_filter_id)
 
                 weed_detector = GreenOnGreen(model_path=model_path)
 
@@ -389,7 +396,7 @@ class Owl:
                         cnts, boxes, weed_centres, image_out = weed_detector.inference(
                             frame,
                             confidence=confidence,
-                            filter_id=63
+                            filter_id=class_filter_id,
                         )
                     else:
                         cnts, boxes, weed_centres, image_out = weed_detector.inference(

@@ -1,6 +1,18 @@
 # Adding Green-on-Green to the OWL (beta)
 Welcome to the first iteration of Green-on-Green or in-crop weed detection with the OWL. This is still an early beta version, so it may require additional troubleshooting. It has been tested and works on both a Raspberry Pi 4, LibreComputer and a Windows desktop computer.
 
+## ONNX Runtime on Raspberry Pi 5
+If you do not have a Google Coral accelerator, the OWL can now run
+Green-on-Green detection using ONNX models on the Raspberry Pi 5. Install
+the ONNX Runtime with:
+
+```
+pip install onnxruntime
+```
+
+Place your `.onnx` model in this directory and update the `model_path`
+in your configuration file (for example, `config/ONNX_GOG.ini`).
+
 ## Stage 1| Hardware/Software - Google Coral Installation
 In addition to the other software installation to get the OpenWeedLocator running, you will also need to install the Google Coral supporting software onto the Raspberry Pi. Simply run `install_coral.sh` from the command line using the instructions below. 
 
