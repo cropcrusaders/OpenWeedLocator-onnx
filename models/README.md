@@ -1,112 +1,134 @@
-# Adding Green-on-Green to the OWL (beta)
-Welcome to the first iteration of Green-on-Green or in-crop weed detection with the OWL. This is still an early beta version, so it may require additional troubleshooting. It has been tested and works on both a Raspberry Pi 4, LibreComputer and a Windows desktop computer.
+# Model Setup for OpenWeedLocator ONNX
 
-## ONNX Runtime on Raspberry Pi 5
-If you do not have a Google Coral accelerator, the OWL can now run
-Green-on-Green detection using ONNX models on the Raspberry Pi 5. Install
-the ONNX Runtime with:
+This version of OpenWeedLocator uses **ONNX models only** for weed detection on Raspberry Pi 5 and other systems without requiring Google Coral accelerators.
 
-```
+## Quick Setup
+
+### 1. Install ONNX Runtime
+
+```bash
 pip install onnxruntime
 ```
 
-Place your `.onnx` model in this directory and update the `model_path`
-in your configuration file (for example, `config/ONNX_GOG.ini`).
+### 2. Add Your Model
 
-## Stage 1| Hardware/Software - Google Coral Installation
-In addition to the other software installation to get the OpenWeedLocator running, you will also need to install the Google Coral supporting software onto the Raspberry Pi. Simply run `install_coral.sh` from the command line using the instructions below. 
+Place your `.onnx` model file in this directory (`models/`). The system will automatically detect and use the first `.onnx` file it finds alphabetically.
 
-### Step 1
-Assuming you have cloned the OpenWeedLocator repository and renamed it to `owl`, navigate to the `models` directory on the Raspberry Pi with:
+### 3. Configure
 
-`owl@raspberrypi:~ $ cd ~/owl/models`
+Update your configuration file (`config/ONNX_GOG.ini`):
+- Set `model_path = models` to auto-detect your ONNX file
+- Or set `model_path = models/your_model.onnx` for a specific model
 
-### Step 2
-Now run the installation file. This will install the `pycoral` library and other important packages to run the Coral. For full instructions on the installation process, we recommend reading  the Google Coral [documentation](https://coral.ai/docs/accelerator/get-started/).
+### 4. Labels
 
-During the installation, you will be asked to confirm performance options and connect the Google Coral USB to the USB3.0 ports (blue). 
-
-`owl@raspberrypi:~ $ chmod +x install_coral.sh && ./install_coral.sh`.
-
-If you run into errors during the `pycoral` library installation, try running 
-
+Ensure `models/labels.txt` matches your model's classes:
 ```
-owl@raspberrypi:~ $ workon owl
-(owl) owl@raspberrypi:~/owl/models$ pip install pycoral
+0 weed
+1 crop
+2 other_class
 ```
 
-### Step 3
-The final step is to test the installation.
+## Model Training and Export
 
-Open up a Python terminal by running:
-```
-(owl) owl@raspberrypi:~/owl/models$ python
-```
+### Recommended: YOLOv8 → ONNX
 
-Now try running:
-```
->>> import pycoral
+1. **Train your model:**
+```bash
+yolo train data=your_dataset.yaml model=yolov8n.pt epochs=100
 ```
 
-If this runs successfully then you're ready to move on to the next step and running object detection models with the OWL.
-
-## Stage 2 | Model Training/Deployment - Inference with the Coral
-Running weed recognition models on the Google Coral requires the generation of a .tflite model file. The .tflite files are specifically designed to be lightweight and efficient, making them well-suited for deployment on edge devices like the Coral USB TPU. One important thing to note is that .tflite files for the Google Coral are specifically optimized for it, so you cannot simply use any .tflite file. Using a generic .tflite file may result in much slower performance or even failure to run.
-
-This is an overview of the process from the official Google Coral documentation:
-![image](https://user-images.githubusercontent.com/51358498/226113545-9b642d75-f611-4ff5-a613-5e684822e619.png)
-
-### Step 1
-To test if the installation has worked, the recommended option is to download a generic model file first from the [Coral model repository](https://coral.ai/models/object-detection/). This will isolate any issues with it running to the OWL or the Google Coral installation, rather than the model training. 
-
-While still in the `models` directory, run this command to download the appropriate model:
-```
-(owl) owl@raspberrypi:~/owl/models$ wget https://raw.githubusercontent.com/google-coral/test_data/master/ssd_mobilenet_v2_coco_quant_postprocess_edgetpu.tflite
+2. **Export to ONNX:**
+```bash
+yolo export model=best.pt format=onnx
 ```
 
-Now change back to the `owl` directory and try running `owl.py` and specifying `gog` for the algorithm. If you don't specify a path to the `.tflite` model file, it will automatically select the first model in the directory when sorted alphabetically.
-
-**NOTE** If you are testing this inside, the camera settings will likely be too dark (and the image will appear entirely black) so you may also need to specify the `--exp-compensation 4` and `--exp-mode auto`. 
-
-```
-(owl) owl@raspberrypi:~/owl/models$ cd ..
-(owl) owl@raspberrypi:~/owl$python owl.py --show-display --algorithm gog
+3. **Copy to models directory:**
+```bash
+cp best.onnx ~/owl/models/weed_model.onnx
 ```
 
-If this runs correctly, a video feed just like the previous green-on-brown approach should appear with a red box around an 'object', which in this case has been filtered to only detect 'potted plants'. If you would like to detect any of the other COCO categories, simply change the `filter_id=63` to a different category. The full list is [available here](https://tech.amikelive.com/node-718/what-object-categories-labels-are-in-coco-dataset/).
+## Testing Your ONNX Setup
 
-Once you have confirmed it is working, you will need to start training and deploying your own weed recognition models.
+### Step 1: Test ONNX Runtime Installation
 
-There are two main ways to generate optimized, weed recognition .tflite files for the Coral. These are detailed below.
+Navigate to your owl directory and test the ONNX Runtime installation:
 
-### Option 1 | Train a model using Tensorflow
-These instructions by EdjeElectronics provide a step-by-step to a working .tflite Edge TPU model file. 
-* [Google Colab walkthrough](https://colab.research.google.com/github/EdjeElectronics/TensorFlow-Lite-Object-Detection-on-Android-and-Raspberry-Pi/blob/master/Train_TFLite2_Object_Detction_Model.ipynb)
-* [Accompanying YouTube video](https://www.youtube.com/watch?v=XZ7FYAMCc4M&ab_channel=EdjeElectronics)
+```bash
+owl@raspberrypi:~ $ cd ~/owl
+owl@raspberrypi:~/owl $ workon owl
+(owl) owl@raspberrypi:~/owl $ python -c "import onnxruntime as ort; print('ONNX Runtime version:', ort.__version__)"
+```
 
-There is also the [official Google Colab tutorial](https://colab.research.google.com/github/google-coral/tutorials/blob/master/retrain_ssdlite_mobiledet_qat_tf1.ipynb) from the Coral documentation, that walks you through the entire training process for custom datasets.
+If this runs successfully, ONNX Runtime is properly installed.
 
-### Train a YOLO v5/v8 model and export as .tflite 
-** NOTE ** it appears this method isn't currently working consistently. Once this resolves, this will be the recommended approach, given the ease of training for YOLO models and the relatively high performance. You can track one of the issues on the Ultralytics repository [here](https://github.com/ultralytics/ultralytics/issues/1185).
+### Step 2: Test with Your Model
 
-To train a YOLOv5 model from Weed-AI, check out this notebook we have for [Weed-AI datasets](https://colab.research.google.com/github/Weed-AI/Weed-AI/blob/master/weed_ai_yolov5.ipynb)). Once it is trained, you must export it using either of the following commands:
+Place your `.onnx` model file in the `models` directory and test it:
 
-#### YOLOv5
-`!python export.py --weights path/to/your/weights/best.pt --include edgetpu`
-#### YOLOv8
-`!yolo export model=path/to/your/weights/best.pt format=edgetpu`
+```bash
+(owl) owl@raspberrypi:~/owl $ python owl.py --show-display --algorithm gog
+```
 
-The full explanation for each method is available in the [Ultralytics YOLOv5](https://github.com/ultralytics/yolov5)
-or [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) repositories.
+**NOTE**: If you are testing indoors, the camera settings may be too dark. You may need to adjust exposure:
 
-Currently, the `GreenOnGreen` class will simply either load the first (alphabetically) model in the directory if specified with
-`algorithm='gog'` or will load the model specified if `algorithm=path/to/model.tflite`. Importantly, all your classes must
-appear in the `labels.txt` file.
+```bash
+(owl) owl@raspberrypi:~/owl $ python owl.py --show-display --algorithm gog --exp-compensation 4
+```
 
-This is a very early version of the approach, so it is subject to change.
+If this runs correctly, you should see a video feed with detection boxes around objects classified by your weed detection model.
+
+## Advanced: Training Your Own Models
+
+For the best results, you'll want to train models specifically for your weeds and crops. The ONNX approach supports any model architecture that can be exported to ONNX format.
+
+### Recommended Workflow
+
+1. **Collect Data**: Use OWL's data collection mode to gather images
+2. **Annotate**: Use tools like [Roboflow](https://roboflow.com/) or [CVAT](https://www.cvat.ai/)
+3. **Train**: Use YOLOv8 or YOLOv5 for best results
+4. **Export**: Convert trained model to ONNX format
+5. **Deploy**: Place ONNX model in the `models` directory
+
+### YOLOv8 Training Example
+
+```bash
+# Install YOLOv8
+pip install ultralytics
+
+# Train model
+yolo train data=your_dataset.yaml model=yolov8n.pt epochs=100
+
+# Export to ONNX
+yolo export model=runs/detect/train/weights/best.pt format=onnx
+
+# Copy to OWL
+cp runs/detect/train/weights/best.onnx ~/owl/models/weed_model.onnx
+```
+
+### Data Collection with OWL
+
+You can use OWL itself to collect training data by enabling image sampling in your config file:
+
+```ini
+[DataCollection]
+sample_images = True
+sample_method = whole
+sample_frequency = 30
+```
+
+This will automatically save images to help build your training dataset.
+
+Currently, the `GreenOnGreen` class will load the first (alphabetically) ONNX model in the directory if specified with
+`algorithm='gog'` or will load a specific model if `algorithm=path/to/model.onnx`. Ensure all your classes
+appear in the `labels.txt` file in the correct order.
 
 ## References
-These are some of the sources used in the development of this aspect of the project.
 
-1. [PyImageSearch](https://pyimagesearch.com/2019/05/13/object-detection-and-image-classification-with-google-coral-usb-accelerator/)
-2. [Google Coral Guides](https://coral.ai/docs/accelerator/get-started/)
+These are some of the sources used in the development of this ONNX-based approach:
+
+1. [ONNX Runtime Documentation](https://onnxruntime.ai/docs/)
+2. [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics)
+3. [Ultralytics YOLOv5](https://github.com/ultralytics/yolov5)
+4. [Weed-AI Dataset Collection](https://weed-ai.sydney.edu.au/)
+5. [Roboflow Annotation Platform](https://roboflow.com/)

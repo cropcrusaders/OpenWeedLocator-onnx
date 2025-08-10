@@ -14,6 +14,11 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+try:
+    import onnxruntime as ort  # Required when using ONNX models
+except Exception:
+    # Allow import to succeed on systems that only use TFLite/Coral
+    ort = None
 
 
 class GreenOnGreen:
@@ -28,19 +33,16 @@ class GreenOnGreen:
         self.model_path = Path(model_path)
 
         if self.model_path.is_dir():
-            model_files = sorted(
-                list(self.model_path.glob("*.onnx"))
-                + list(self.model_path.glob("*.tflite"))
-            )
+            model_files = sorted(list(self.model_path.glob("*.onnx")))
             if not model_files:
                 raise FileNotFoundError(
-                    "No .onnx or .tflite model files found. Please provide a directory "
-                    "or model file."
+                    "No .onnx model files found. Please provide a directory "
+                    "containing .onnx files or specify an .onnx model file directly."
                 )
             self.model_path = model_files[0]
             print(f"[INFO] Using {self.model_path.stem} model...")
 
-        elif self.model_path.suffix in {".onnx", ".tflite"}:
+        elif self.model_path.suffix == ".onnx":
             print(f"[INFO] Using {self.model_path.stem} model...")
 
         else:
@@ -48,20 +50,22 @@ class GreenOnGreen:
                 f"[WARNING] Specified model path {model_path} is unsupported, "
                 "attempting to use default..."
             )
-            model_files = sorted(
-                list(Path("models").glob("*.onnx"))
-                + list(Path("models").glob("*.tflite"))
-            )
+            model_files = sorted(list(Path("models").glob("*.onnx")))
             try:
                 self.model_path = model_files[0]
                 print(f"[INFO] Using {self.model_path.stem} model...")
             except IndexError:
-                raise FileNotFoundError("No model files found.")
+                raise FileNotFoundError("No .onnx model files found.") from None
 
         self.labels = self._read_label_file(label_file)
         self.backend = None
 
         if self.model_path.suffix == ".onnx":
+
+            if ort is None:
+                raise ImportError(
+                    "onnxruntime is not installed. Please install it for ONNX models."
+                )
 
             self.backend = "onnx"
             self.session = ort.InferenceSession(
@@ -73,19 +77,16 @@ class GreenOnGreen:
             self.inference_size = (input_shape[3], input_shape[2])
 
         elif self.model_path.suffix == ".tflite":
-            from pycoral.adapters.common import input_size
-            from pycoral.adapters.detect import get_objects
-            from pycoral.utils.edgetpu import make_interpreter, run_inference
-            self.backend = "tflite"
-            self._run_inference = run_inference
-            self._get_objects = get_objects
-            self.interpreter = make_interpreter(self.model_path.as_posix())
-            self.interpreter.allocate_tensors()
-            self.inference_size = input_size(self.interpreter)
+            raise ImportError(
+                "TensorFlow Lite/Coral support has been removed. "
+                "Please use ONNX models (.onnx files) instead. "
+                "Convert your model to ONNX format: yolo export model=best.pt format=onnx"
+            )
 
         else:
             raise ValueError(
-                "Unsupported model format. Expected .onnx or .tflite file."
+                "Unsupported model format. Expected .onnx file only. "
+                "TensorFlow Lite support has been removed."
             )
 
     @staticmethod
@@ -105,89 +106,52 @@ class GreenOnGreen:
         self.boxes = []
         self.weed_centers = []
 
-        if self.backend == "tflite":
-            cv2_im_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            cv2_im_rgb = cv2.resize(cv2_im_rgb, self.inference_size)
-            self._run_inference(self.interpreter, cv2_im_rgb.tobytes())
-            objects = self._get_objects(self.interpreter, confidence)
+        # ONNX inference only
+        img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        img_resized = cv2.resize(img_rgb, self.inference_size)
+        img_norm = img_resized.astype(np.float32) / 255.0
+        img_input = np.transpose(img_norm, (2, 0, 1))[np.newaxis, :]
 
-            scale_x = width / self.inference_size[0]
-            scale_y = height / self.inference_size[1]
+        detections = self.session.run(None, {self.input_name: img_input})[0][0]
 
-            for det_object in objects:
-                if filter_id is not None and det_object.id != filter_id:
-                    continue
-                bbox = det_object.bbox.scale(scale_x, scale_y)
+        for det in detections:
+            if len(det) < 5:
+                # Skip detections with unexpected format
+                continue
+            x, y, w, h, obj_conf, *class_conf = det
+            if len(class_conf) == 0:
+                class_conf = [1.0]
+            class_id = int(np.argmax(class_conf))
+            score = obj_conf * class_conf[class_id]
+            if score < confidence:
+                continue
+            if filter_id is not None and class_id != filter_id:
+                continue
 
-                start_x, start_y = int(bbox.xmin), int(bbox.ymin)
-                end_x, end_y = int(bbox.xmax), int(bbox.ymax)
-                box_w = end_x - start_x
-                box_h = end_y - start_y
+            x1 = int((x - w / 2) * width / self.inference_size[0])
+            y1 = int((y - h / 2) * height / self.inference_size[1])
+            x2 = int((x + w / 2) * width / self.inference_size[0])
+            y2 = int((y + h / 2) * height / self.inference_size[1])
+            box_w = x2 - x1
+            box_h = y2 - y1
 
-                self.boxes.append([start_x, start_y, box_w, box_h])
-                center_x = int(start_x + (box_w / 2))
-                center_y = int(start_y + (box_h / 2))
-                self.weed_centers.append([center_x, center_y])
+            self.boxes.append([x1, y1, box_w, box_h])
+            center_x = int(x1 + box_w / 2)
+            center_y = int(y1 + box_h / 2)
+            self.weed_centers.append([center_x, center_y])
 
-                percent = int(100 * det_object.score)
-                label = f"{percent}% {self.labels.get(det_object.id, det_object.id)}"
-                cv2.rectangle(image, (start_x, start_y), (end_x, end_y), (0, 0, 255), 2)
-                cv2.putText(
-                    image,
-                    label,
-                    (start_x, start_y + 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1.0,
-                    (255, 0, 0),
-                    2,
-                )
-
-        else:  # ONNX
-            img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            img_resized = cv2.resize(img_rgb, self.inference_size)
-            img_norm = img_resized.astype(np.float32) / 255.0
-            img_input = np.transpose(img_norm, (2, 0, 1))[np.newaxis, :]
-
-            detections = self.session.run(None, {self.input_name: img_input})[0][0]
-
-            for det in detections:
-                if len(det) < 5:
-                    # Skip detections with unexpected format
-                    continue
-                x, y, w, h, obj_conf, *class_conf = det
-                if len(class_conf) == 0:
-                    class_conf = [1.0]
-                class_id = int(np.argmax(class_conf))
-                score = obj_conf * class_conf[class_id]
-                if score < confidence:
-                    continue
-                if filter_id is not None and class_id != filter_id:
-                    continue
-
-                x1 = int((x - w / 2) * width / self.inference_size[0])
-                y1 = int((y - h / 2) * height / self.inference_size[1])
-                x2 = int((x + w / 2) * width / self.inference_size[0])
-                y2 = int((y + h / 2) * height / self.inference_size[1])
-                box_w = x2 - x1
-                box_h = y2 - y1
-
-                self.boxes.append([x1, y1, box_w, box_h])
-                center_x = int(x1 + box_w / 2)
-                center_y = int(y1 + box_h / 2)
-                self.weed_centers.append([center_x, center_y])
-
-                percent = int(score * 100)
-                label = self.labels.get(class_id, str(class_id))
-                cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                cv2.putText(
-                    image,
-                    f"{percent}% {label}",
-                    (x1, y1 + 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1.0,
-                    (255, 0, 0),
-                    2,
-                )
+            percent = int(score * 100)
+            label = self.labels.get(class_id, str(class_id))
+            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            cv2.putText(
+                image,
+                f"{percent}% {label}",
+                (x1, y1 + 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.0,
+                (255, 0, 0),
+                2,
+            )
 
         return None, self.boxes, self.weed_centers, image
 

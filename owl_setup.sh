@@ -40,6 +40,7 @@ STATUS_CAMERA_TEST=""
 STATUS_FULL_UPGRADE=""
 STATUS_VENV=""
 STATUS_OPENCV=""
+STATUS_ONNX_RUNTIME=""
 STATUS_OWL_DEPS=""
 STATUS_BOOT_SCRIPTS=""
 STATUS_DESKTOP_ICON=""
@@ -50,6 +51,7 @@ ERROR_CAMERA_TEST=""
 ERROR_FULL_UPGRADE=""
 ERROR_VENV=""
 ERROR_OPENCV=""
+ERROR_ONNX_RUNTIME=""
 ERROR_OWL_DEPS=""
 ERROR_BOOT_SCRIPTS=""
 ERROR_DESKTOP_ICON=""
@@ -166,13 +168,18 @@ check_status "Installing OpenCV" "OPENCV"
 
 sleep 1s
 
-# Step 8: Install OWL dependencies
+# Step 8: Install ONNX Runtime for weed detection
+echo -e "${GREEN}[INFO] Installing ONNX Runtime for green-on-green detection...${NC}"
+pip install onnxruntime
+check_status "Installing ONNX Runtime" "ONNX_RUNTIME"
+
+# Step 9: Install OWL dependencies
 echo -e "${GREEN}[INFO] Installing the OWL Python dependencies...${NC}"
 cd "$SCRIPT_DIR"
 pip install -r requirements.txt
 check_status "Installing dependencies from requirements.txt" "OWL_DEPS"
 
-# Step 9: Make scripts executable and set up boot configuration
+# Step 10: Make scripts executable and set up boot configuration
 echo -e "${GREEN}[INFO] Making scripts executable...${NC}"
 chmod a+x owl.py
 check_status "Making owl.py executable" "BOOT_SCRIPTS"
@@ -239,6 +246,7 @@ fi
 
 echo -e "$STATUS_VENV Virtual Environment Created"
 echo -e "$STATUS_OPENCV OpenCV Installed"
+echo -e "$STATUS_ONNX_RUNTIME ONNX Runtime Installed"
 echo -e "$STATUS_OWL_DEPS OWL Dependencies Installed"
 echo -e "$STATUS_BOOT_SCRIPTS Boot Scripts Moved"
 echo -e "$STATUS_DESKTOP_ICON Desktop Icon Created"
@@ -251,8 +259,9 @@ EOF
 
 echo -e "${GREEN}[COMPLETE] OWL version installed: ${NEW_VERSION}${NC}"
 
-# Step 10: Start OWL focusing
-read -p "Start OWL focusing? (y/n): " choice
+# Step 11: Start OWL focusing
+# Step 12: Setup startup scripts
+read -p "Setup startup scripts? (y/n): " choice
 case "$choice" in
   y|Y ) echo -e "${GREEN}[INFO] Starting focusing...${NC}"; "$FOCUS_WRAPPER" &;;
   n|N ) echo -e "${GREEN}[INFO] Focusing skipped. Double click the desktop icon to focus the OWL later.${NC}";;
